@@ -4,6 +4,7 @@ import pdfplumber
 from email import policy
 from email.parser import BytesParser
 import argparse
+import ollama
 
 def extract_text_from_docx(file_path):
     doc = docx.Document(file_path)
@@ -63,11 +64,16 @@ def main():
 
     # Example usage:
     directory_path = args.s
-    file_texts = build_file_text_dict(directory_path)
-    print(file_texts)
+    # file_texts = build_file_text_dict(directory_path)
 
     # Placeholder for LLM response
-    llm_response = f"Model: {args.m}\nPrompt: {args.q}\nResponse: [LLM response here]"
+    response = ollama.chat(model='gemma2', messages=[
+        {
+            'role': 'user',
+            'content': args.q,
+        },
+    ])
+    llm_response = response['message']['content']
 
     if args.o:
         with open(args.o, 'w', encoding='utf-8') as output_file:
