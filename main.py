@@ -1,146 +1,79 @@
-import argparse
-import logging
 import os
-from datetime import datetime
-from pathlib import Path
-from typing import List, Dict
+import docx
+import pdfplumber
+from email import policy
+from email.parser import BytesParser
+import argparse
 
-from crewai import Agent, Task, Crew
-from langchain.tools import Tool
-from langchain_community.llms import Ollama
+def extract_text_from_docx(file_path):
+    doc = docx.Document(file_path)
+    return '\n'.join([para.text for para in doc.paragraphs])
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+def extract_text_from_pdf(file_path):
+    text = ''
+    with pdfplumber.open(file_path) as pdf:
+        for page in pdf.pages:
+            text += page.extract_text() + '\n'
+    return text
 
-class DocumentProcessor:
-    SUPPORTED_EXTENSIONS = {'.txt', '.pdf', '.docx', '.md', '.eml'}
-    
-    @staticmethod
-    def get_documents(folder_path: str) -> List[Path]:
-        folder = Path(folder_path)
-        if not folder.exists():
-            raise ValueError(f"Folder not found: {folder_path}")
-        
-        documents = []
-        for file in folder.rglob('*'):
-            if file.suffix.lower() in DocumentProcessor.SUPPORTED_EXTENSIONS:
-                documents.append(file)
-            else:
-                logger.warning(f"Skipping unsupported file: {file}")
-        return documents
+def extract_text_from_txt(file_path):
+    with open(file_path, 'r', encoding='utf-8') as file:
+        return file.read()
 
-def create_agents(model_name: str) -> Dict[str, Agent]:
-    llm = Ollama(model=model_name)
-    
-    summarizer = Agent(
-        name="Summarizer",
-        llm=llm,
-        role="Document Summarizer",
-        goal="Create concise summaries of documents while preserving key information",
-        tools=[Tool(
-            name="read_file",
-            func=lambda x: open(x).read(),
-            description="Read content of a file"
-        )]
-    )
-    
-    analyzer = Agent(
-        name="Analyzer",
-        llm=llm,
-        role="Content Analyzer",
-        goal="Synthesize document summaries into a cohesive narrative"
-    )
-    
-    producer = Agent(
-        name="Producer",
-        llm=llm,
-        role="Content Producer",
-        goal="Create final response addressing the user's query based on analyzed content"
-    )
-    
-    return {"summarizer": summarizer, "analyzer": analyzer, "producer": producer}
+def extract_text_from_md(file_path):
+    with open(file_path, 'r', encoding='utf-8') as file:
+        return file.read()
 
-def create_tasks(agents: Dict[str, Agent], documents: List[Path], query: str) -> List[Task]:
-    tasks = []
-    
-    # Create summarization tasks for each document
-    for doc in documents:
-        tasks.append(Task(
-            description=f"Summarize the content of {doc}",
-            agent=agents["summarizer"]
-        ))
-    
-    # Create analysis task
-    tasks.append(Task(
-        description="Synthesize all document summaries into a cohesive narrative",
-        agent=agents["analyzer"]
-    ))
-    
-    # Create production task
-    tasks.append(Task(
-        description=f"Create final response addressing the query: {query}",
-        agent=agents["producer"]
-    ))
-    
-    return tasks
+def extract_text_from_eml(file_path):
+    with open(file_path, 'rb') as file:
+        msg = BytesParser(policy=policy.default).parse(file)
+        return msg.get_body(preferencelist=('plain')).get_content()
 
-def save_output(content: str, output_path: str, query: str):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    markdown_content = f"""# Document Analysis Results
-
-## Analysis
-{content}
-
----
-**Query:** {query}
-**Generated:** {timestamp}
-"""
-    
-    with open(output_path, 'w') as f:
-        f.write(markdown_content)
+def build_file_text_dict(directory_path):
+    file_text_dict = {}
+    for root, _, files in os.walk(directory_path):
+        for file in files:
+            file_path = os.path.join(root, file)
+            if file.endswith('.docx'):
+                file_text_dict[file] = extract_text_from_docx(file_path)
+            elif file.endswith('.pdf'):
+                file_text_dict[file] = extract_text_from_pdf(file_path)
+            elif file.endswith('.txt'):
+                file_text_dict[file] = extract_text_from_txt(file_path)
+            elif file.endswith('.md'):
+                file_text_dict[file] = extract_text_from_md(file_path)
+            elif file.endswith('.eml'):
+                file_text_dict[file] = extract_text_from_eml(file_path)
+    return file_text_dict
 
 def main():
-    parser = argparse.ArgumentParser(description='Document Analysis Tool')
-    parser.add_argument('-m', '--model', required=True, help='Local Ollama model name')
-    parser.add_argument('-q', '--query', required=True, help='Main user query')
-    parser.add_argument('-f', '--folder', required=True, help='Target folder path')
-    parser.add_argument('-o', '--output', help='Output file path (optional)')
-    
-    args = parser.parse_args()
-    
-    try:
-        # Get list of documents
-        documents = DocumentProcessor.get_documents(args.folder)
-        if not documents:
-            raise ValueError(f"No supported documents found in {args.folder}")
-        
-        # Create agents and tasks
-        agents = create_agents(args.model)
-        tasks = create_tasks(agents, documents, args.query)
-        
-        # Create and run crew
-        crew = Crew(
-            agents=list(agents.values()),
-            tasks=tasks
-        )
-        result = crew.kickoff()
-        
-        # Handle output
-        if args.output:
-            save_output(result, args.output, args.query)
-            logger.info(f"Results saved to {args.output}")
-        else:
-            print("\nAnalysis Results:")
-            print("----------------")
-            print(result)
-            
-    except Exception as e:
-        logger.error(f"Error: {str(e)}")
-        raise
+    parser = argparse.ArgumentParser(
+        description='Process some documents and generate responses using a language model.',
+        epilog='Example usage:\n'
+               '  python main.py -q "What is the capital of France?" -s /path/to/source/folder\n'
+               '  python main.py -q "What is the capital of France?" -s /path/to/source/folder -o output.md',
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+    parser.add_argument('-m', default='gemma2', help='Model name, defaults to "gemma2"')
+    parser.add_argument('-q', required=True, help='User prompt (the question the agentic system will answer)')
+    parser.add_argument('-s', required=True, help='Source folder (where the system will search for document files)')
+    parser.add_argument('-o', help='Optional, a filename to save the output as a .md markdown file (the llm response)')
 
-if __name__ == "__main__":
+    args = parser.parse_args()
+
+    # Example usage:
+    directory_path = args.s
+    file_texts = build_file_text_dict(directory_path)
+    print(file_texts)
+
+    # Placeholder for LLM response
+    llm_response = f"Model: {args.m}\nPrompt: {args.q}\nResponse: [LLM response here]"
+
+    if args.o:
+        with open(args.o, 'w', encoding='utf-8') as output_file:
+            output_file.write(llm_response)
+    else:
+        print(llm_response)
+
+if __name__ == '__main__':
     main()
