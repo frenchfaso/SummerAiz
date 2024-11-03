@@ -8,6 +8,21 @@ from litellm import completion
 import concurrent.futures
 from concurrent.futures import ProcessPoolExecutor
 import multiprocessing
+import logging
+import sys
+from tqdm import tqdm
+
+def setup_logging():
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+    return logging.getLogger(__name__)
+
+logger = setup_logging()
 
 global_model = None
 
@@ -119,23 +134,27 @@ User Query:
 
 def process_file(file_data, model):
     file_path, file_name = file_data
-    # Extract text using existing methods
-    if file_name.endswith('.docx'):
-        text = extract_text_from_docx(file_path)
-    elif file_name.endswith('.pdf'):
-        text = extract_text_from_pdf(file_path)
-    elif file_name.endswith('.txt'):
-        text = extract_text_from_txt(file_path)
-    elif file_name.endswith('.md'):
-        text = extract_text_from_md(file_path)
-    elif file_name.endswith('.eml'):
-        text = extract_text_from_eml(file_path)
-    else:
+    logger.debug(f"Processing file: {file_name}")
+    try:
+        if file_name.endswith('.docx'):
+            text = extract_text_from_docx(file_path)
+        elif file_name.endswith('.pdf'):
+            text = extract_text_from_pdf(file_path)
+        elif file_name.endswith('.txt'):
+            text = extract_text_from_txt(file_path)
+        elif file_name.endswith('.md'):
+            text = extract_text_from_md(file_path)
+        elif file_name.endswith('.eml'):
+            text = extract_text_from_eml(file_path)
+        else:
+            logger.warning(f"Unsupported file type: {file_name}")
+            return file_name, ""
+        
+        summary = summarize_content(text, model)
+        return file_name, summary
+    except Exception as e:
+        logger.error(f"Error processing {file_name}: {str(e)}")
         return file_name, ""
-    
-    # Summarize the extracted text
-    summary = summarize_content(text, model)
-    return file_name, summary
 
 def process_file_wrapper(file_data):
     return process_file(file_data, global_model)
@@ -162,26 +181,29 @@ def build_file_text_dict(directory_path):
 
 
 def process_documents(directory, model, user_query):
-    # Set the global model variable so it can be accessed by worker processes
+    logger.info("Starting document processing pipeline")
     global global_model
     global_model = model
 
-    # Get list of files
+    logger.info(f"Scanning directory: {directory}")
     files = [(os.path.join(directory, f), f) for f in os.listdir(directory)]
+    logger.info(f"Found {len(files)} files to process")
 
-    # Process files in parallel with summarization
+    logger.info("Processing files in parallel")
     with ProcessPoolExecutor() as executor:
-        results = list(executor.map(process_file_wrapper, files))
+        results = list(tqdm(
+            executor.map(process_file_wrapper, files),
+            total=len(files),
+            desc="Processing files"
+        ))
 
-    # Create dictionary of summaries
     summaries_dict = dict(results)
-    # print(summaries_dict)
+    logger.info(f"Generated summaries for {len(summaries_dict)} files")
 
-    # Generate synthesis of summaries
+    logger.info("Analyzing summaries")
     synthesis = analyze_summaries(summaries_dict, model)
-    # print(synthesis)
 
-    # Produce final response
+    logger.info("Generating final response")
     final_response = produce_response(user_query, synthesis, model)
 
     return final_response
@@ -201,18 +223,23 @@ def main():
 
     args = parser.parse_args()
 
-    # Process documents through multi-agent pipeline
-    model = f"ollama_chat/{args.m}"
-    llm_response = process_documents(args.s, model, args.q)
+    logger.info(f"Starting processing with model: {args.m}")
+    logger.info(f"Source directory: {args.s}")
+    
+    try:
+        model = f"ollama_chat/{args.m}"
+        llm_response = process_documents(args.s, model, args.q)
 
-    # Print response to terminal
-    print("\nResponse:")
-    print(llm_response)
+        print("\nResponse:")
+        print(llm_response)
 
-    if args.o:
-        with open(args.o, 'w', encoding='utf-8') as f:
-            f.write(llm_response)
-        print(f"\nResponse saved to {args.o}")
+        if args.o:
+            with open(args.o, 'w', encoding='utf-8') as f:
+                f.write(llm_response)
+            logger.info(f"Response saved to {args.o}")
+    except Exception as e:
+        logger.error(f"An error occurred: {str(e)}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
