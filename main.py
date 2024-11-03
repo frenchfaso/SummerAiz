@@ -37,50 +37,83 @@ def extract_text_from_eml(file_path):
 
 def summarize_content(text, model):
     """Summarize document content using the specified model."""
-    system_prompt = "You are a summarization expert. Your task is to provide concise and accurate summaries of given texts."
-    prompt = f"Please provide a concise summary of the following text:\n\n{text}"
+    system_prompt = """You are an expert summarization assistant specializing in distilling complex documents into clear, concise, and informative summaries.
+
+**Your tasks are:**
+- Carefully read and comprehend the provided text.
+- Identify key points, main arguments, significant details, and conclusions.
+- Preserve the original context, tone, and intent of the document.
+- Produce a summary that is concise (approximately 150-200 words), coherent, and free of personal opinions or biases.
+- Ensure the summary is easily understandable to readers unfamiliar with the original text.
+
+**Guidelines:**
+- Use clear and direct language.
+- Avoid technical jargon unless necessary, and explain any essential terms.
+- Do not include unnecessary details or repeat information.
+
+Begin the summary below:"""
+    
+    prompt = f"{text}"
     response = completion(model=model, messages=[
-        {"content": system_prompt, "role": "system"},
-        {"content": prompt, "role": "user"}
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": prompt}
     ])
     return response.choices[0].message.content
 
 def analyze_summaries(summaries_dict, model):
     """Synthesize summaries into a coherent narrative."""
-    system_prompt = """You are an expert analyst specializing in synthesizing information from multiple sources.
-Your task is to create a cohesive narrative that:
-- Identifies common themes across documents
-- Highlights key connections and contradictions
-- Provides a comprehensive overview of the collected information
-Be concise but thorough in your analysis."""
+    system_prompt = """You are an expert analyst skilled in synthesizing information from multiple documents to create a cohesive and insightful analysis.
 
-    formatted_summaries = "\n\n".join([f"Document '{k}':\n{v}" for k, v in summaries_dict.items()])
-    user_prompt = f"Please analyze and synthesize these document summaries:\n\n{formatted_summaries}"
+**Your tasks are:**
+- Integrate the provided summaries into a unified narrative.
+- Identify and elaborate on common themes, patterns, and trends across the documents.
+- Highlight connections, relationships, and any contradictions between the documents.
+- Provide a comprehensive overview that captures the collective insights of all summaries.
+- Present the analysis in an organized manner with clear headings or sections if necessary.
+
+**Guidelines:**
+- Use objective language and maintain neutrality.
+- Support your analysis with evidence from the summaries.
+- Ensure the synthesis is accessible to readers without prior knowledge of the documents.
+
+Begin your synthesis below:"""
     
+    formatted_summaries = "\n\n".join([f"Document '{k}':\n{v}" for k, v in summaries_dict.items()])
+    user_prompt = f"{formatted_summaries}"
+        
     response = completion(model=model, messages=[
-        {"content": system_prompt, "role": "system"},
-        {"content": user_prompt, "role": "user"}
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt}
     ])
     return response.choices[0].message.content
 
 def produce_response(user_query, synthesis, model):
     """Generate final response based on synthesis and user query."""
-    system_prompt = """You are an expert information producer specializing in answering queries based on synthesized content.
-Your task is to:
-- Generate precise and relevant responses to user queries
-- Draw from the provided document synthesis
-- Present information in a clear and coherent manner
-Focus on accuracy and relevance in your responses."""
+    system_prompt = """You are a knowledgeable assistant proficient in providing detailed and accurate answers to user queries based on synthesized information from multiple sources.
 
-    user_prompt = f"""Using this document synthesis as context:
+**Your tasks are:**
+- Carefully read the user's query and understand their information needs.
+- Utilize the synthesized document information to construct your response.
+- Provide clear, precise, and well-structured answers that directly address the query.
+- Include relevant details, examples, or explanations from the synthesis to support your answer.
+- Ensure your response is accurate, unbiased, and helpful.
 
+**Guidelines:**
+- Maintain a formal and informative tone.
+- Do not introduce information not present in the synthesis.
+- If the synthesis lacks information to answer the query fully, acknowledge this and provide the best possible answer based on available data.
+
+Begin your response below:"""
+    
+    user_prompt = f"""Synthesized Information:
 {synthesis}
 
-Query: {user_query}"""
-
+User Query:
+{user_query}"""
+    
     response = completion(model=model, messages=[
-        {"content": system_prompt, "role": "system"},
-        {"content": user_prompt, "role": "user"}
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt}
     ])
     return response.choices[0].message.content
 
@@ -146,7 +179,7 @@ def process_documents(directory, model, user_query):
 
     # Generate synthesis of summaries
     synthesis = analyze_summaries(summaries_dict, model)
-    print(synthesis)
+    # print(synthesis)
 
     # Produce final response
     final_response = produce_response(user_query, synthesis, model)
