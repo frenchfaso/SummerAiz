@@ -52,14 +52,14 @@ def extract_text_from_eml(file_path):
 
 def summarize_content(text, model):
     """Summarize document content using the specified model."""
-    system_prompt = """You are an expert summarization assistant specializing in distilling complex documents into clear, concise, and informative summaries.
+    system_prompt = """You are an expert summarization assistant specializing in analyzing emails and CVs from candidates applying for a project involving AI (DL/ML) and full-stack software development.
 
 **Your tasks are:**
 - Carefully read and comprehend the provided text.
 - Identify key points, main arguments, significant details, and conclusions.
-- Preserve the original context, tone, and intent of the document.
-- Produce a summary that is concise (approximately 150-200 words), coherent, and free of personal opinions or biases.
-- Ensure the summary is easily understandable to readers unfamiliar with the original text.
+- Extract relevant information about the candidate's skills, experience, and qualifications.
+- Produce a condensed profile/report of the candidate that highlights their suitability for the project.
+- Ensure the summary is concise (approximately 150-200 words), coherent, and free of personal opinions or biases.
 
 **Guidelines:**
 - Use clear and direct language.
@@ -76,14 +76,15 @@ Begin the summary below:"""
     return response.choices[0].message.content
 
 def analyze_summaries(summaries_dict, model):
-    """Synthesize summaries into a coherent narrative."""
-    system_prompt = """You are an expert analyst skilled in synthesizing information from multiple documents to create a cohesive and insightful analysis.
+    """Synthesize summaries into a cohesive and detailed report for each candidate."""
+    system_prompt = """You are an expert analyst skilled in synthesizing information from multiple documents to create a cohesive and detailed report for each candidate.
 
 **Your tasks are:**
-- Integrate the provided summaries into a unified narrative.
-- Identify and elaborate on common themes, patterns, and trends across the documents.
+- Integrate the provided summaries into a unified report for each candidate.
+- Identify and elaborate on the candidate's skills and experiences from CV-like data.
+- Assess the candidate's attitude from emails, conversations, and other communications.
 - Highlight connections, relationships, and any contradictions between the documents.
-- Provide a comprehensive overview that captures the collective insights of all summaries.
+- Provide a comprehensive overview that captures the collective insights of all summaries for each candidate.
 - Present the analysis in an organized manner with clear headings or sections if necessary.
 
 **Guidelines:**
