@@ -12,17 +12,26 @@ import logging
 import sys
 from tqdm import tqdm
 
-def setup_logging():
+def setup_logging(verbosity):
+    level = logging.INFO
+    if verbosity == 1:
+        level = logging.DEBUG
+    elif verbosity == 2:
+        level = logging.WARNING
+    elif verbosity == 3:
+        level = logging.ERROR
+
     logging.basicConfig(
-        level=logging.INFO,
+        level=level,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(sys.stdout)
         ]
     )
+        
     return logging.getLogger(__name__)
 
-logger = setup_logging()
+logger = None
 
 global_model = None
 
@@ -203,6 +212,7 @@ def process_documents(directory, model, user_query):
 
     logger.info("Analyzing summaries")
     synthesis = analyze_summaries(summaries_dict, model)
+    print(synthesis)
 
     logger.info("Generating final response")
     final_response = produce_response(user_query, synthesis, model)
@@ -221,8 +231,12 @@ def main():
     parser.add_argument('-q', required=True, help='User prompt (the question the agentic system will answer)')
     parser.add_argument('-s', required=True, help='Source folder (where the system will search for document files)')
     parser.add_argument('-o', help='Optional, a filename to save the output as a .md markdown file (the llm response)')
+    parser.add_argument('-v', type=int, choices=[0, 1, 2, 3], default=0, help='Verbosity level: 0=INFO, 1=DEBUG, 2=WARNING, 3=ERROR')
 
     args = parser.parse_args()
+
+    global logger
+    logger = setup_logging(args.v)
 
     logger.info(f"Starting processing with model: {args.m}")
     logger.info(f"Source directory: {args.s}")
