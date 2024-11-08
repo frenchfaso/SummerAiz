@@ -59,16 +59,15 @@ def extract_text_from_eml(file_path):
         msg = BytesParser(policy=policy.default).parse(file)
         return msg.get_body(preferencelist=('plain')).get_content()
 
-def summarize_content(text, model):
+def summarize_content(text, model, context_window=8192):
     """Summarize document content using the specified model."""
-    system_prompt = """You are an expert summarization assistant specializing in analyzing emails and CVs from candidates applying for a project involving AI (DL/ML) and full-stack software development.
+    system_prompt = """You are an expert summarization assistant specializing in analyzing various types of documents.
 
 **Your tasks are:**
 - Carefully read and comprehend the provided text.
 - Identify key points, main arguments, significant details, and conclusions.
-- Extract relevant information about the candidate's skills, experience, and qualifications.
-- Produce a condensed profile/report of the candidate that highlights their suitability for the project.
-- Ensure the summary is concise (approximately 150-200 words), coherent, and free of personal opinions or biases.
+- Extract relevant information and produce a detailed summary of the document.
+- Ensure the summary is concise (approximately 200-250 words), coherent, and free of personal opinions or biases.
 
 **Guidelines:**
 - Use clear and direct language.
@@ -85,21 +84,21 @@ Begin the summary below:"""
     return response.choices[0].message.content
 
 def analyze_summaries(summaries_dict, model):
-    """Synthesize summaries into a cohesive and detailed report for each candidate."""
-    system_prompt = """You are an expert analyst skilled in synthesizing information from multiple documents to create a cohesive and detailed report for each candidate.
+    """Synthesize summaries into a cohesive and detailed report."""
+    system_prompt = """You are an expert analyst skilled in synthesizing information from multiple documents to create a cohesive and detailed report.
 
 **Your tasks are:**
-- Integrate the provided summaries into a unified report for each candidate.
-- Identify and elaborate on the candidate's skills and experiences from CV-like data.
-- Assess the candidate's attitude from emails, conversations, and other communications.
+- Integrate the provided summaries into a unified report.
 - Highlight connections, relationships, and any contradictions between the documents.
-- Provide a comprehensive overview that captures the collective insights of all summaries for each candidate.
+- Provide a comprehensive overview that captures the collective insights of all summaries.
 - Present the analysis in an organized manner with clear headings or sections if necessary.
+- Identify any gaps or missing information that could be relevant.
 
 **Guidelines:**
 - Use objective language and maintain neutrality.
 - Support your analysis with evidence from the summaries.
 - Ensure the synthesis is accessible to readers without prior knowledge of the documents.
+- Use bullet points or numbered lists where appropriate to enhance clarity.
 
 Begin your synthesis below:"""
     
@@ -212,7 +211,7 @@ def process_documents(directory, model, user_query):
 
     logger.info("Analyzing summaries")
     synthesis = analyze_summaries(summaries_dict, model)
-    print(synthesis)
+    # print(synthesis)
 
     logger.info("Generating final response")
     final_response = produce_response(user_query, synthesis, model)
