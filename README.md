@@ -21,3 +21,16 @@ SummerAiz scans your specified directory, processes each document, and extracts 
 1. **Install Dependencies**: Make sure you have all the required Python packages installed.
 2. **Install Ollama**: Follow the instructions [here](https://ollama.com) to install Ollama.
 3. **Run the Script**: Use the command line to run the script with your query and source folder.
+
+### Command-line Options
+
+- `-m`: Model name, defaults to "gemma2".
+- `-q`: User prompt (the question the agentic system will answer) (required).
+- `-s`: Source folder (where the system will search for document files) (required).
+- `-o`: Optional, a filename to save the output as a .md markdown file (the llm response).
+- `-v`: Verbosity level: 0=INFO, 1=DEBUG, 2=WARNING, 3=ERROR (default is 0).
+
+### Example Usage
+```sh
+python main.py -q "What is the capital of France?" -s /path/to/source/folder
+```

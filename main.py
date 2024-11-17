@@ -34,6 +34,7 @@ def setup_logging(verbosity):
 logger = None
 
 global_model = None
+global_context_window = 8192
 
 def extract_text_from_docx(file_path):
     doc = docx.Document(file_path)
@@ -59,7 +60,7 @@ def extract_text_from_eml(file_path):
         msg = BytesParser(policy=policy.default).parse(file)
         return msg.get_body(preferencelist=('plain')).get_content()
 
-def summarize_content(text, model, context_window=8192):
+def summarize_content(text, model):
     """Summarize document content using the specified model."""
     system_prompt = """You are an expert summarization assistant specializing in analyzing various types of documents.
 
@@ -80,7 +81,8 @@ Begin the summary below:"""
     response = completion(model=model, messages=[
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": prompt}
-    ])
+    ],
+    num_ctx=global_context_window)
     return response.choices[0].message.content
 
 def analyze_summaries(summaries_dict, model):
@@ -108,10 +110,11 @@ Begin your synthesis below:"""
     response = completion(model=model, messages=[
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt}
-    ])
+    ],
+    num_ctx=global_context_window)
     return response.choices[0].message.content
 
-def produce_response(user_query, synthesis, model):
+def produce_response(user_query, synthesis, model, markdown_output=False):
     """Generate final response based on synthesis and user query."""
     system_prompt = """You are a knowledgeable assistant proficient in providing detailed and accurate answers to user queries based on synthesized information from multiple sources.
 
@@ -126,9 +129,13 @@ def produce_response(user_query, synthesis, model):
 - Maintain a formal and informative tone.
 - Do not introduce information not present in the synthesis.
 - If the synthesis lacks information to answer the query fully, acknowledge this and provide the best possible answer based on available data.
+"""
 
-Begin your response below:"""
-    
+    if markdown_output:
+        system_prompt += "\n- Format the response in nicely formatted markdown."
+
+    system_prompt += "\n\nBegin your response below:"
+
     user_prompt = f"""Synthesized Information:
 {synthesis}
 
@@ -138,7 +145,8 @@ User Query:
     response = completion(model=model, messages=[
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt}
-    ])
+    ],
+    num_ctx=global_context_window)
     return response.choices[0].message.content
 
 def process_file(file_data, model):
@@ -189,7 +197,7 @@ def build_file_text_dict(directory_path):
     return file_text_dict
 
 
-def process_documents(directory, model, user_query):
+def process_documents(directory, model, user_query, markdown_output):
     logger.info("Starting document processing pipeline")
     global global_model
     global_model = model
@@ -211,10 +219,10 @@ def process_documents(directory, model, user_query):
 
     logger.info("Analyzing summaries")
     synthesis = analyze_summaries(summaries_dict, model)
-    # print(synthesis)
+    print(synthesis)
 
     logger.info("Generating final response")
-    final_response = produce_response(user_query, synthesis, model)
+    final_response = produce_response(user_query, synthesis, model, markdown_output)
 
     return final_response
 
@@ -242,7 +250,8 @@ def main():
     
     try:
         model = f"ollama_chat/{args.m}"
-        llm_response = process_documents(args.s, model, args.q)
+        markdown_output = bool(args.o)
+        llm_response = process_documents(args.s, model, args.q, markdown_output)
 
         print("\nResponse:")
         print(llm_response)
