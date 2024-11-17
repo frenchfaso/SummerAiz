@@ -116,7 +116,7 @@ Begin your synthesis below:"""
 
 def produce_response(user_query, synthesis, model, markdown_output=False):
     """Generate final response based on synthesis and user query."""
-    system_prompt = """You are a knowledgeable assistant proficient in providing detailed and accurate answers to user queries based on synthesized information from multiple sources.
+    system_prompt = """You are a knowledgeable assistant proficient in providing detailed and accurate answers to user queries based on synthesized information.
 
 **Your tasks are:**
 - Carefully read the user's query and understand their information needs.
