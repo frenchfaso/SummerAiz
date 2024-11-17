@@ -7,12 +7,8 @@ from email import policy
 from email.parser import BytesParser
 import argparse
 from litellm import completion
-import concurrent.futures
-from concurrent.futures import ProcessPoolExecutor
-import multiprocessing
 import logging
 import sys
-from tqdm import tqdm
 
 def setup_logging(verbosity):
     level = logging.INFO
@@ -76,6 +72,13 @@ def summarize_content(text, model):
 - Use clear and direct language.
 - Avoid technical jargon unless necessary, and explain any essential terms.
 - Do not include unnecessary details or repeat information.
+- Maintain the original context and meaning of the document.
+- Highlight any critical insights or findings.
+
+**Formatting:**
+- Start with a brief introduction if necessary.
+- Use bullet points for lists or key points.
+- Ensure proper grammar and punctuation.
 
 Begin the summary below:"""
     
@@ -83,70 +86,6 @@ Begin the summary below:"""
     response = completion(model=model, messages=[
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": prompt}
-    ],
-    num_ctx=global_context_window)
-    return response.choices[0].message.content
-
-def analyze_summaries(summaries_dict, model):
-    """Synthesize summaries into a cohesive and detailed report."""
-    system_prompt = """You are an expert analyst skilled in synthesizing information from multiple documents to create a cohesive and detailed report.
-
-**Your tasks are:**
-- Integrate the provided summaries into a unified report.
-- Highlight connections, relationships, and any contradictions between the documents.
-- Provide a comprehensive overview that captures the collective insights of all summaries.
-- Present the analysis in an organized manner with clear headings or sections if necessary.
-- Identify any gaps or missing information that could be relevant.
-
-**Guidelines:**
-- Use objective language and maintain neutrality.
-- Support your analysis with evidence from the summaries.
-- Ensure the synthesis is accessible to readers without prior knowledge of the documents.
-- Use bullet points or numbered lists where appropriate to enhance clarity.
-
-Begin your synthesis below:"""
-    
-    formatted_summaries = "\n\n".join([f"Document '{k}':\n{v}" for k, v in summaries_dict.items()])
-    user_prompt = f"{formatted_summaries}"
-        
-    response = completion(model=model, messages=[
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt}
-    ],
-    num_ctx=global_context_window)
-    return response.choices[0].message.content
-
-def produce_response(user_query, synthesis, model, markdown_output=False):
-    """Generate final response based on synthesis and user query."""
-    system_prompt = """You are a knowledgeable assistant proficient in providing detailed and accurate answers to user queries based on synthesized information.
-
-**Your tasks are:**
-- Carefully read the user's query and understand their information needs.
-- Utilize the synthesized document information to construct your response.
-- Provide clear, precise, and well-structured answers that directly address the query.
-- Include relevant details, examples, or explanations from the synthesis to support your answer.
-- Ensure your response is accurate, unbiased, and helpful.
-
-**Guidelines:**
-- Maintain a formal and informative tone.
-- Do not introduce information not present in the synthesis.
-- If the synthesis lacks information to answer the query fully, acknowledge this and provide the best possible answer based on available data.
-"""
-
-    if markdown_output:
-        system_prompt += "\n- Format the response in nicely formatted markdown."
-
-    system_prompt += "\n\nBegin your response below:"
-
-    user_prompt = f"""Synthesized Information:
-{synthesis}
-
-User Query:
-{user_query}"""
-    
-    response = completion(model=model, messages=[
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt}
     ],
     num_ctx=global_context_window)
     return response.choices[0].message.content
@@ -170,36 +109,13 @@ def process_file(file_data, model):
             return file_name, ""
         
         summary = summarize_content(text, model)
+        print(f"File: '{file_name}'\nSummary: '{summary}'\n")
         return file_name, summary
     except Exception as e:
         logger.error(f"Error processing {file_name}: {str(e)}")
         return file_name, ""
 
-def process_file_wrapper(file_data):
-    return process_file(file_data, global_model)
-
-def build_file_text_dict(directory_path):
-    file_text_dict = {}
-    files_to_process = []
-    
-    # Collect all files first
-    for root, _, files in os.walk(directory_path):
-        for file in files:
-            file_path = os.path.join(root, file)
-            files_to_process.append((file_path, file))
-    
-    # Process files in parallel using all available cores
-    with ProcessPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
-        results = executor.map(process_file, files_to_process)
-        
-        for file_name, content in results:
-            if content:  # Only add if content was successfully extracted
-                file_text_dict[file_name] = content
-                
-    return file_text_dict
-
-
-def process_documents(directory, model, user_query, markdown_output):
+def process_documents(directory, model):
     logger.info("Starting document processing pipeline")
     global global_model
     global_model = model
@@ -208,38 +124,20 @@ def process_documents(directory, model, user_query, markdown_output):
     files = [(os.path.join(directory, f), f) for f in os.listdir(directory)]
     logger.info(f"Found {len(files)} files to process")
 
-    logger.info("Processing files in parallel")
-    with ProcessPoolExecutor() as executor:
-        results = list(tqdm(
-            executor.map(process_file_wrapper, files),
-            total=len(files),
-            desc="Processing files"
-        ))
-
-    summaries_dict = dict(results)
-    logger.info(f"Generated summaries for {len(summaries_dict)} files")
-
-    logger.info("Analyzing summaries")
-    synthesis = analyze_summaries(summaries_dict, model)
-    print(synthesis)
-
-    logger.info("Generating final response")
-    final_response = produce_response(user_query, synthesis, model, markdown_output)
-
-    return final_response
+    for file_data in files:
+        process_file(file_data, model)
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Process some documents and generate responses using a language model.',
+        description='Process some documents and generate summaries using a language model.',
         epilog='Example usage:\n'
-               '  python main.py -q "What is the capital of France?" -s /path/to/source/folder\n'
-               '  python main.py -q "What is the capital of France?" -s /path/to/source/folder -o output.md',
+               '  python main.py -s /path/to/source/folder\n'
+               '  python main.py -s /path/to/source/folder -o output.md',
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument('-m', default='gemma2', help='Model name, defaults to "gemma2"')
-    parser.add_argument('-q', required=True, help='User prompt (the question the agentic system will answer)')
     parser.add_argument('-s', required=True, help='Source folder (where the system will search for document files)')
-    parser.add_argument('-o', help='Optional, a filename to save the output as a .md markdown file (the llm response)')
+    parser.add_argument('-o', help='Optional, a filename to save the output as a .md markdown file (the summaries)')
     parser.add_argument('-v', type=int, choices=[0, 1, 2, 3], default=0, help='Verbosity level: 0=INFO, 1=DEBUG, 2=WARNING, 3=ERROR')
 
     args = parser.parse_args()
@@ -252,16 +150,15 @@ def main():
     
     try:
         model = f"ollama_chat/{args.m}"
-        markdown_output = bool(args.o)
-        llm_response = process_documents(args.s, model, args.q, markdown_output)
-
-        print("\nResponse:")
-        print(llm_response)
+        process_documents(args.s, model)
 
         if args.o:
             with open(args.o, 'w', encoding='utf-8') as f:
-                f.write(llm_response)
-            logger.info(f"Response saved to {args.o}")
+                for file_data in [(os.path.join(args.s, f), f) for f in os.listdir(args.s)]:
+                    file_name, summary = process_file(file_data, model)
+                    if summary:
+                        f.write(f"File: '{file_name}'\nSummary: '{summary}'\n\n")
+            logger.info(f"Summaries saved to {args.o}")
     except Exception as e:
         logger.error(f"An error occurred: {str(e)}")
         sys.exit(1)
